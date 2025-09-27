@@ -1,13 +1,8 @@
 <div align="center">
 
-# VectorVault — AI Security Operations Center
-
-AI‑powered incident intelligence with semantic vector search.  
-Frontend: React + TypeScript + Vite · Backend: Node/Express · Database: TiDB Serverless (optional)  
-Includes a zero‑dependency Mock Mode for instant local testing.
+# VectorVault — The Future of SOC
 
 </div>
-
 ---
 
 ## Table of Contents
@@ -532,4 +527,3 @@ For support and questions:
 ---
 
 **Note**: This application requires TiDB Serverless and OpenAI API access. Please ensure you have the necessary accounts and API keys before running the application.
-# TiDB-AgentX-2025-Project-VectorVault
