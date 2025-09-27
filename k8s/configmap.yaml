@@ -1,0 +1,14 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: incident-guard-ai-config
+data:
+  VITE_TIDB_HOST: gateway01.ap-southeast-1.prod.aws.tidbcloud.com
+  VITE_TIDB_PORT: "4000"
+  VITE_TIDB_USER: p6o37Drd6zJay5B.root
+  VITE_TIDB_PASSWORD: As4RBX5jhNwjOgld
+  VITE_TIDB_DATABASE: test
+  VITE_APP_ENV: production
+  REDIS_HOST: "redis-service"
+  REDIS_PORT: "6379"
+  REDIS_CACHE_TTL: "3600"

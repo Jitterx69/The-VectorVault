@@ -1,0 +1,109 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: database-replicas-config
+data:
+  # Primary database connection
+  DB_PRIMARY_HOST: "gateway01.ap-southeast-1.prod.aws.tidbcloud.com"
+  DB_PRIMARY_PORT: "4000"
+  DB_PRIMARY_USER: "p6o37Drd6zJay5B.root"
+  DB_PRIMARY_PASSWORD: "As4RBX5jhNwjOgld"
+  DB_PRIMARY_DATABASE: "test"
+
+  # Read replica connections (when available)
+  DB_REPLICA_1_HOST: "gateway01.ap-southeast-1.prod.aws.tidbcloud.com"
+  DB_REPLICA_1_PORT: "4000"
+  DB_REPLICA_1_USER: "p6o37Drd6zJay5B.root"
+  DB_REPLICA_1_PASSWORD: "As4RBX5jhNwjOgld"
+  DB_REPLICA_1_DATABASE: "test"
+
+  # Connection pool settings
+  DB_POOL_MIN: "2"
+  DB_POOL_MAX: "20"
+  DB_POOL_IDLE_TIMEOUT: "30000"
+  DB_POOL_ACQUIRE_TIMEOUT: "60000"
+
+  # Read/write splitting settings
+  DB_READ_WRITE_SPLITTING_ENABLED: "true"
+  DB_READ_WEIGHT: "70"
+  DB_WRITE_WEIGHT: "30"
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: database-proxy
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      app: database-proxy
+  template:
+    metadata:
+      labels:
+        app: database-proxy
+    spec:
+      containers:
+      - name: proxy
+        image: nginx:alpine
+        ports:
+        - containerPort: 3306
+        envFrom:
+        - configMapRef:
+            name: database-replicas-config
+        resources:
+          requests:
+            memory: "128Mi"
+            cpu: "100m"
+          limits:
+            memory: "256Mi"
+            cpu: "200m"
+        # This is a placeholder - in production you'd use a proper database proxy
+        command: ["/bin/sh", "-c", "nginx -c /etc/nginx/nginx.conf"]
+        volumeMounts:
+        - name: nginx-config
+          mountPath: /etc/nginx/nginx.conf
+          subPath: nginx.conf
+      volumes:
+      - name: nginx-config
+        configMap:
+          name: database-proxy-config
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: database-proxy-config
+data:
+  nginx.conf: |
+    events {
+      worker_connections 1024;
+    }
+    stream {
+      upstream db_primary {
+        server gateway01.ap-southeast-1.prod.aws.tidbcloud.com:4000;
+      }
+
+      upstream db_replicas {
+        server gateway01.ap-southeast-1.prod.aws.tidbcloud.com:4000 weight=7;
+        # Add more replicas here when available
+        # server replica2.example.com:4000 weight=7;
+      }
+
+      server {
+        listen 3306;
+        proxy_pass db_primary;
+        proxy_connect_timeout 5s;
+        proxy_timeout 30s;
+      }
+    }
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: database-proxy-service
+spec:
+  selector:
+    app: database-proxy
+  ports:
+  - port: 3306
+    targetPort: 3306
+  type: ClusterIP

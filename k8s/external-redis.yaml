@@ -1,0 +1,43 @@
+# External Redis Configuration (AWS ElastiCache)
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: external-redis-config
+data:
+  REDIS_HOST: "your-elasticache-endpoint.cache.amazonaws.com"
+  REDIS_PORT: "6379"
+  REDIS_PASSWORD: ""  # Set if your ElastiCache cluster has authentication enabled
+  REDIS_TLS: "true"   # Enable TLS for secure connection
+  REDIS_CACHE_TTL: "3600"
+---
+# Service to represent external Redis (for DNS resolution)
+apiVersion: v1
+kind: Service
+metadata:
+  name: external-redis-service
+spec:
+  type: ExternalName
+  externalName: your-elasticache-endpoint.cache.amazonaws.com
+  ports:
+  - port: 6379
+    protocol: TCP
+    targetPort: 6379
+---
+# Network Policy to allow traffic to external Redis
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: allow-external-redis
+spec:
+  podSelector:
+    matchLabels:
+      app: incident-guard-ai
+  policyTypes:
+  - Egress
+  egress:
+  - to:
+    - ipBlock:
+        cidr: 0.0.0.0/0  # Allow all outbound traffic (adjust for security)
+    ports:
+    - protocol: TCP
+      port: 6379

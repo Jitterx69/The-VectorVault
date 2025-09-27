@@ -1,7 +1,10 @@
 const express = require('express');
 const cors = require('cors');
 const { createConnection } = require('mysql2/promise');
+const promClient = require('prom-client');
+const rateLimit = require('express-rate-limit');
 require('dotenv').config();
+const path = require('path');
 
 const app = express();
 const PORT = process.env.PORT || 3001;
@@ -9,6 +12,59 @@ const PORT = process.env.PORT || 3001;
 // Middleware
 app.use(cors());
 app.use(express.json());
+
+// Rate limiting
+const limiter = rateLimit({
+  windowMs: 15 * 60 * 1000, // 15 minutes
+  max: 100, // limit each IP to 100 requests per windowMs
+  message: 'Too many requests from this IP, please try again later.',
+  standardHeaders: true,
+  legacyHeaders: false,
+});
+
+const apiLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000, // 15 minutes
+  max: 500, // limit each IP to 500 API requests per windowMs
+  message: 'API rate limit exceeded, please try again later.',
+  standardHeaders: true,
+  legacyHeaders: false,
+});
+
+// Apply rate limiting to all requests
+app.use(limiter);
+// Apply stricter rate limiting to API routes
+app.use('/api/', apiLimiter);
+
+// Prometheus metrics
+const collectDefaultMetrics = promClient.collectDefaultMetrics;
+collectDefaultMetrics();
+
+const httpRequestDuration = new promClient.Histogram({
+  name: 'http_request_duration_seconds',
+  help: 'Duration of HTTP requests in seconds',
+  labelNames: ['method', 'route', 'status_code'],
+});
+
+const httpRequestsTotal = new promClient.Counter({
+  name: 'http_requests_total',
+  help: 'Total number of HTTP requests',
+  labelNames: ['method', 'route', 'status_code'],
+});
+
+// Middleware to collect metrics
+app.use((req, res, next) => {
+  const start = Date.now();
+  res.on('finish', () => {
+    const duration = (Date.now() - start) / 1000;
+    httpRequestDuration
+      .labels(req.method, req.route?.path || req.path, res.statusCode.toString())
+      .observe(duration);
+    httpRequestsTotal
+      .labels(req.method, req.route?.path || req.path, res.statusCode.toString())
+      .inc();
+  });
+  next();
+});
 
 // Database connection
 let connection = null;
@@ -155,6 +211,11 @@ const parseArray = (val) => {
 // Routes
 app.get('/api/health', (req, res) => {
   res.json({ status: 'ok', message: 'Server is running', mode: hasRealCreds() ? 'real' : 'mock' });
+});
+
+app.get('/metrics', async (req, res) => {
+  res.set('Content-Type', promClient.register.contentType);
+  res.end(await promClient.register.metrics());
 });
 
 app.get('/api/test-connection', async (req, res) => {
@@ -469,6 +530,15 @@ app.post('/api/seed-data', async (req, res) => {
   } catch (error) {
     res.status(500).json({ error: error.message });
   }
+});
+
+// Serve static files from the React build directory
+app.use(express.static(path.join(__dirname, 'dist')));
+
+// The "catchall" handler: for any request that doesn't match an API route,
+// send back the app's index.html file.
+app.get(/.*/, (req, res) => {
+  res.sendFile(path.join(__dirname, 'dist', 'index.html'));
 });
 
 // Start server
