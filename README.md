@@ -1,10 +1,5 @@
 # VectorVault - Advanced Security Operations Platform
 
-[![Build Status](https://github.com/vectorvault/vectorvault/workflows/CI/badge.svg)](https://github.com/vectorvault/vectorvault/actions)
-[![Security Rating](https://sonarcloud.io/api/project_badges/measure?project=vectorvault&metric=security_rating)](https://sonarcloud.io/dashboard?id=vectorvault)
-[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
-[![Docker Pulls](https://img.shields.io/docker/pulls/vectorvault/app)](https://hub.docker.com/r/vectorvault/app)
-
 > **Next-Generation SOC Platform** - AI-powered threat detection, proactive incident management, and zero-trust authentication with the revolutionary A.S.T.R.A. framework
 
 ## Table of Contents
