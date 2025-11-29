@@ -1,10 +1,10 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
-import { Lock, User } from "lucide-react";
+import { Lock, User, Key } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import logo from "@/assets/Background-removebg-preview.png";
 
@@ -15,36 +15,104 @@ const Auth = () => {
   const navigate = useNavigate();
   const { toast } = useToast();
 
+  const [isGenerating, setIsGenerating] = useState(false);
+  const [timeLeft, setTimeLeft] = useState<number | null>(null);
+
+  useEffect(() => {
+    if (timeLeft === null) return;
+
+    if (timeLeft === 0) {
+      setTimeLeft(null);
+      toast({
+        title: "Credentials Expired",
+        description: "Please generate new credentials to login",
+        variant: "destructive"
+      });
+      return;
+    }
+
+    const intervalId = setInterval(() => {
+      setTimeLeft((prev) => (prev !== null ? prev - 1 : null));
+    }, 1000);
+
+    return () => clearInterval(intervalId);
+  }, [timeLeft, toast]);
+
+  const formatTime = (seconds: number) => {
+    const mins = Math.floor(seconds / 60);
+    const secs = seconds % 60;
+    return `${mins}:${secs.toString().padStart(2, '0')}`;
+  };
+
   const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
     setIsLoading(true);
 
-    // Simulate authentication with hashcode validation
-    setTimeout(() => {
-      if (username && password) {
-        // Store auth state in localStorage for demo
+    try {
+      const response = await fetch('http://localhost:3001/api/login', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ username, password })
+      });
+
+      const data = await response.json();
+
+      if (data.success) {
         localStorage.setItem('vectorvault-auth', 'true');
         localStorage.setItem('vectorvault-user', username);
         
         toast({
           title: "Authentication Successful",
           description: "Welcome to VectorVault Security Center",
+          className: "bg-success/20 border-success/30 text-success"
         });
         
         navigate("/dashboard");
       } else {
-        toast({
-          title: "Authentication Failed", 
-          description: "Please enter valid hashcode credentials",
-          variant: "destructive"
-        });
+        throw new Error(data.error || 'Authentication failed');
       }
+    } catch (error) {
+      toast({
+        title: "Authentication Failed", 
+        description: error instanceof Error ? error.message : "Invalid credentials",
+        variant: "destructive"
+      });
+    } finally {
       setIsLoading(false);
-    }, 1500);
+    }
+  };
+
+  const handleGenerateCredentials = async () => {
+    setIsGenerating(true);
+    try {
+      const response = await fetch('http://localhost:3001/api/generate-auth', {
+        method: 'POST'
+      });
+      const data = await response.json();
+      
+      if (data.success) {
+        setTimeLeft(120); // Start 2 minute timer
+        toast({
+          title: "Credentials Generated",
+          description: "Check your admin email. Valid for 2 minutes.",
+          className: "bg-primary/20 border-primary/30 text-primary"
+        });
+      } else {
+        throw new Error(data.error);
+      }
+    } catch (error) {
+      toast({
+        title: "Generation Failed",
+        description: "Could not generate credentials",
+        variant: "destructive"
+      });
+    } finally {
+      setIsGenerating(false);
+    }
   };
 
   return (
-    <div className="min-h-screen flex items-center justify-center bg-background relative overflow-hidden">
+    <div className="min-h-screen flex flex-col items-center justify-center bg-background relative overflow-hidden">
       {/* Background effects */}
       <div className="absolute inset-0 bg-gradient-to-br from-primary/5 via-background to-danger/5" />
       <div className="absolute top-1/4 left-1/4 w-96 h-96 bg-primary/10 rounded-full blur-3xl" />
@@ -62,6 +130,13 @@ const Auth = () => {
             </div>
           </div>
           <CardTitle className="text-xl">Secure Access Portal</CardTitle>
+          {timeLeft !== null && (
+            <div className="mt-2 p-2 bg-primary/10 rounded-md border border-primary/20 animate-pulse">
+              <p className="text-sm font-mono text-primary">
+                Login Window: {formatTime(timeLeft)}
+              </p>
+            </div>
+          )}
         </CardHeader>
         
         <CardContent>
@@ -115,6 +190,30 @@ const Auth = () => {
           </form>
         </CardContent> 
       </Card>
+
+      <div className="flex items-center justify-between mt-6">
+        <Button 
+          variant="outline"
+          className="glow-primary active:scale-95 transition-all duration-200 group relative overflow-hidden"
+          onClick={handleGenerateCredentials}
+          disabled={isGenerating}
+        >
+          <div className="absolute inset-0 bg-primary/10 translate-y-full group-hover:translate-y-0 transition-transform duration-300" />
+          <div className="relative flex items-center space-x-2">
+            {isGenerating ? (
+              <>
+                <div className="w-4 h-4 border-2 border-primary/30 border-t-primary rounded-full animate-spin" />
+                <span>Generating Secure Keys...</span>
+              </>
+            ) : (
+              <>
+                <Key className="h-4 w-4" />
+                <span>Generate Authentication Credentials</span>
+              </>
+            )}
+          </div>
+        </Button>
+      </div>
     </div>
   );
 };

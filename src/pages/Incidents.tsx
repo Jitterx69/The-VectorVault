@@ -134,11 +134,45 @@ const Incidents = () => {
     setShowIncidentDetails(true);
   };
 
-  const handleInvestigate = (incident: any) => {
+  const [investigatingId, setInvestigatingId] = useState<string | null>(null);
+
+  const handleInvestigate = async (incident: any) => {
+    setInvestigatingId(incident.id);
     toast({
-      title: "Investigation Started",
-      description: `Investigation workflow initiated for incident ${incident.id}`,
+      title: "Investigation Initiated",
+      description: "Generating threat report and notifying admin...",
     });
+
+    try {
+      const response = await fetch('http://localhost:3001/api/investigate-incident', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ 
+          type: incident.title, // Use title as type for better mapping
+          id: incident.id 
+        })
+      });
+
+      const data = await response.json();
+
+      if (data.success) {
+        toast({
+          title: "Investigation Report Sent",
+          description: `Detailed threat analysis for ${incident.id} has been emailed to admin.`,
+          className: "bg-success/20 border-success/30 text-success"
+        });
+      } else {
+        throw new Error(data.error);
+      }
+    } catch (error) {
+      toast({
+        title: "Investigation Failed",
+        description: "Could not send investigation report.",
+        variant: "destructive"
+      });
+    } finally {
+      setInvestigatingId(null);
+    }
   };
 
   const filteredIncidents = incidents.filter(incident => {
@@ -365,9 +399,18 @@ const Incidents = () => {
                     <Eye className="h-4 w-4 mr-2" />
                     View Details
                   </Button>
-                  <Button size="sm" className="glow-primary" onClick={() => handleInvestigate(incident)}>
-                    <Shield className="h-4 w-4 mr-2" />
-                    Investigate
+                  <Button 
+                    size="sm" 
+                    className="glow-primary" 
+                    onClick={() => handleInvestigate(incident)}
+                    disabled={investigatingId === incident.id}
+                  >
+                    {investigatingId === incident.id ? (
+                      <div className="w-4 h-4 border-2 border-primary-foreground/30 border-t-primary-foreground rounded-full animate-spin mr-2" />
+                    ) : (
+                      <Shield className="h-4 w-4 mr-2" />
+                    )}
+                    {investigatingId === incident.id ? "Sending..." : "Investigate"}
                   </Button>
                 </div>
               </div>

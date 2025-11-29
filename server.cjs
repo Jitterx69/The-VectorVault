@@ -58,6 +58,103 @@ const httpRequestDuration = new promClient.Histogram({
   labelNames: ['method', 'route', 'status_code'],
 });
 
+// In-memory storage for active credentials (temporary)
+let activeCredentials = {
+  username: null,
+  password: null,
+  generatedAt: null,
+  expiresAt: null
+};
+
+// Generate Authentication Credentials Endpoint
+app.post('/api/generate-auth', async (req, res) => {
+  try {
+    const { spawn } = require('child_process');
+    const pythonProcess = spawn('python3', [
+      path.join(__dirname, 'auth_manager.py'),
+      'generate'
+    ]);
+
+    let pythonOutput = '';
+
+    pythonProcess.stdout.on('data', (data) => {
+      pythonOutput += data.toString();
+    });
+
+    pythonProcess.on('close', (code) => {
+      if (code === 0) {
+        try {
+          const result = JSON.parse(pythonOutput.trim());
+          if (result.success) {
+            // Set expiration to 2 minutes from now
+            const now = new Date();
+            const expiresAt = new Date(now.getTime() + 2 * 60 * 1000); // 2 minutes
+
+            // Store credentials in memory
+            activeCredentials = {
+              username: result.username,
+              password: result.password,
+              generatedAt: now,
+              expiresAt: expiresAt
+            };
+            
+            res.json({ 
+              success: true, 
+              message: 'Credentials generated and emailed',
+              expiresIn: 120 // seconds
+            });
+          } else {
+            res.status(500).json({ success: false, error: result.error });
+          }
+        } catch (e) {
+          res.status(500).json({ success: false, error: 'Failed to parse auth script output' });
+        }
+      } else {
+        res.status(500).json({ success: false, error: 'Auth script failed' });
+      }
+    });
+  } catch (error) {
+    res.status(500).json({ success: false, error: error.message });
+  }
+});
+
+// Login Endpoint
+app.post('/api/login', async (req, res) => {
+  const { username, password } = req.body;
+
+  // Check if credentials exist
+  if (!activeCredentials.username || !activeCredentials.password) {
+    return res.status(401).json({ success: false, error: 'No active credentials. Please generate new ones.' });
+  }
+
+  // Check if credentials have expired
+  if (new Date() > activeCredentials.expiresAt) {
+    // Clear expired credentials
+    activeCredentials = { username: null, password: null, generatedAt: null, expiresAt: null };
+    return res.status(401).json({ success: false, error: 'Credentials have expired. Please generate new ones.' });
+  }
+
+  // Check if credentials match active credentials
+  if (username === activeCredentials.username && 
+      password === activeCredentials.password) {
+    
+    // Clear used credentials after successful login (optional security measure, keeping active for window for now)
+    // activeCredentials = { username: null, password: null, generatedAt: null, expiresAt: null };
+    
+    res.json({ success: true, message: 'Authentication successful' });
+  } else {
+    // Trigger alert email for failed login
+    const { spawn } = require('child_process');
+    const pythonProcess = spawn('python3', [
+      path.join(__dirname, 'auth_manager.py'),
+      'alert',
+      '--username', username || 'Unknown'
+    ]);
+    
+    res.status(401).json({ success: false, error: 'Invalid credentials' });
+  }
+});
+
 const httpRequestsTotal = new promClient.Counter({
   name: 'http_requests_total',
   help: 'Total number of HTTP requests',
@@ -639,6 +736,293 @@ app.post('/api/predict-attack', async (req, res) => {
       success: false,
       error: error.message,
       details: 'An error occurred during attack prediction'
+    });
+  }
+});
+
+// Get Recent Incidents Endpoint (Real-time from predictions table)
+app.get('/api/recent-incidents', async (req, res) => {
+  try {
+    const limit = parseInt(req.query.limit) || 5;
+
+    if (sqliteDb) {
+      try {
+        // Fetch recent predictions from the database
+        const stmt = sqliteDb.prepare(`
+          SELECT 
+            id,
+            predicted_attack_name as type,
+            confidence,
+            timestamp,
+            input_vector,
+            summary
+          FROM predictions 
+          ORDER BY timestamp DESC 
+          LIMIT ?
+        `);
+        
+        const predictions = stmt.all(limit);
+
+        // Transform to incident format
+        const incidents = predictions.map((pred, index) => {
+          // Calculate time ago
+          const timestamp = new Date(pred.timestamp);
+          const now = new Date();
+          const diffMs = now - timestamp;
+          const diffMins = Math.floor(diffMs / 60000);
+          
+          let timeAgo;
+          if (diffMins < 1) {
+            timeAgo = 'Just now';
+          } else if (diffMins < 60) {
+            timeAgo = `${diffMins} min${diffMins > 1 ? 's' : ''} ago`;
+          } else {
+            const diffHours = Math.floor(diffMins / 60);
+            timeAgo = `${diffHours} hour${diffHours > 1 ? 's' : ''} ago`;
+          }
+
+          // Determine severity based on confidence
+          let severity;
+          if (pred.confidence >= 0.8) {
+            severity = 'Critical';
+          } else if (pred.confidence >= 0.6) {
+            severity = 'High';
+          } else if (pred.confidence >= 0.4) {
+            severity = 'Medium';
+          } else {
+            severity = 'Low';
+          }
+
+          // Determine status based on time
+          let status;
+          if (diffMins < 5) {
+            status = 'Active';
+          } else if (diffMins < 30) {
+            status = 'Investigating';
+          } else {
+            status = 'Contained';
+          }
+
+          return {
+            id: `INC-2024-${String(1000 + pred.id).slice(-3)}`,
+            type: pred.type || 'Unknown Threat',
+            severity: severity,
+            time: timeAgo,
+            status: status,
+            confidence: Math.round(pred.confidence * 100),
+            inputVector: pred.input_vector,
+            summary: pred.summary
+          };
+        });
+
+        res.json({
+          success: true,
+          incidents: incidents,
+          count: incidents.length,
+          lastUpdate: new Date().toISOString()
+        });
+
+      } catch (dbError) {
+        console.error('Database query error:', dbError.message);
+        throw dbError;
+      }
+    } else {
+      // Return mock data when database is not available
+      const mockIncidents = [
+        { 
+          id: "INC-2024-001", 
+          type: "DDoS Attack", 
+          severity: "Critical", 
+          time: "2 mins ago", 
+          status: "Active",
+          confidence: 95,
+          inputVector: "[1, 0, 0]"
+        },
+        { 
+          id: "INC-2024-002", 
+          type: "SQL Injection (SQLi)", 
+          severity: "High", 
+          time: "15 mins ago", 
+          status: "Investigating",
+          confidence: 87,
+          inputVector: "[0, 1, 0]"
+        },
+        { 
+          id: "INC-2024-003", 
+          type: "Phishing Attack", 
+          severity: "Medium", 
+          time: "1 hour ago", 
+          status: "Contained",
+          confidence: 72,
+          inputVector: "[0, 0, 1]"
+        }
+      ];
+
+      res.json({
+        success: true,
+        incidents: mockIncidents,
+        count: mockIncidents.length,
+        lastUpdate: new Date().toISOString(),
+        usingMockData: true
+      });
+    }
+
+  } catch (error) {
+    console.error('Recent incidents error:', error);
+    res.status(500).json({ 
+      success: false,
+      error: error.message,
+      details: 'Failed to fetch recent incidents'
+    });
+  }
+});
+
+// Investigate Incident Endpoint
+app.post('/api/investigate-incident', async (req, res) => {
+  const { type, id } = req.body;
+
+  if (!type || !id) {
+    return res.status(400).json({ success: false, error: 'Incident Type and ID are required' });
+  }
+
+  try {
+    const { spawn } = require('child_process');
+    const pythonProcess = spawn('python3', [
+      path.join(__dirname, 'incident_reporter.py'),
+      '--type', type,
+      '--id', id
+    ]);
+
+    let pythonOutput = '';
+
+    pythonProcess.stdout.on('data', (data) => {
+      pythonOutput += data.toString();
+    });
+
+    pythonProcess.on('close', (code) => {
+      if (code === 0) {
+        try {
+          const result = JSON.parse(pythonOutput.trim());
+          if (result.success) {
+            res.json(result);
+          } else {
+            res.status(500).json(result);
+          }
+        } catch (e) {
+          res.status(500).json({ success: false, error: 'Failed to parse reporter output' });
+        }
+      } else {
+        res.status(500).json({ success: false, error: 'Reporter script failed' });
+      }
+    });
+  } catch (error) {
+    res.status(500).json({ success: false, error: error.message });
+  }
+});
+
+// Send Security Code Email Endpoint
+app.post('/api/send-security-code', async (req, res) => {
+  try {
+    console.log('Generating and sending security code...');
+
+    // Call Python script to generate code and send email
+    const { spawn } = require('child_process');
+    const pythonProcess = spawn('python3', [
+      path.join(__dirname, 'send_security_code.py')
+    ]);
+
+    let pythonOutput = '';
+    let pythonError = '';
+
+    // Collect output
+    pythonProcess.stdout.on('data', (data) => {
+      pythonOutput += data.toString();
+    });
+
+    pythonProcess.stderr.on('data', (data) => {
+      pythonError += data.toString();
+    });
+
+    // Wait for completion
+    await new Promise((resolve, reject) => {
+      pythonProcess.on('close', (code) => {
+        if (code === 0) {
+          try {
+            const result = JSON.parse(pythonOutput.trim());
+            
+            if (result.success) {
+              console.log(`Security code sent: ${result.code} to ${result.recipient}`);
+              
+              // Log to database as an incident
+              if (sqliteDb) {
+                try {
+                  const stmt = sqliteDb.prepare(`
+                    INSERT INTO predictions (timestamp, input_vector, predicted_attack_name, confidence, summary, points)
+                    VALUES (?, ?, ?, ?, ?, ?)
+                  `);
+                  
+                  stmt.run(
+                    new Date().toISOString(),
+                    result.code, // Use the code as input vector
+                    'Security Code Triggered', // Incident Type
+                    1.0, // 100% confidence
+                    `Emergency security code generated and sent to ${result.recipient}`,
+                    JSON.stringify([
+                      '**Action:** Verify admin identity immediately',
+                      '**Log:** Check system access logs for concurrent activity',
+                      '**Protocol:** Follow emergency response manual section 4.2'
+                    ])
+                  );
+                  console.log('Security code logged to database');
+                } catch (dbError) {
+                  console.error('Failed to log security code to DB:', dbError);
+                }
+              }
+
+              res.json({
+                success: true,
+                code: result.code,
+                message: result.message,
+                recipient: result.recipient,
+                timestamp: new Date().toISOString()
+              });
+              resolve();
+            } else {
+              console.error('Email sending failed:', result.message);
+              res.status(500).json({
+                success: false,
+                error: result.message || 'Failed to send email',
+                details: result.error
+              });
+              reject(new Error(result.message));
+            }
+          } catch (parseError) {
+            console.error('Failed to parse Python output:', pythonOutput);
+            res.status(500).json({
+              success: false,
+              error: 'Failed to parse response from email service',
+              details: pythonOutput
+            });
+            reject(parseError);
+          }
+        } else {
+          console.error('Python process failed:', pythonError);
+          res.status(500).json({
+            success: false,
+            error: `Email service failed with code ${code}`,
+            details: pythonError
+          });
+          reject(new Error(`Python process exited with code ${code}`));
+        }
+      });
+    });
+
+  } catch (error) {
+    console.error('Security code generation error:', error);
+    res.status(500).json({ 
+      success: false,
+      error: error.message,
+      details: 'An error occurred while generating security code'
     });
   }
 });

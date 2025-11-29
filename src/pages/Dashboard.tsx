@@ -1,8 +1,9 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import { useToast } from "@/hooks/use-toast";
 import GenerateReportModal from "@/components/modals/GenerateReportModal";
 import NetworkHealthModal from "@/components/modals/NetworkHealthModal";
 import ServerLoadModal from "@/components/modals/ServerLoadModal";
@@ -29,12 +30,72 @@ const Dashboard = () => {
   const [showServerLoad, setShowServerLoad] = useState(false);
   const [showThreatLevel, setShowThreatLevel] = useState(false);
   const [showActiveConnections, setShowActiveConnections] = useState(false);
+  const [isSendingCode, setIsSendingCode] = useState(false);
   const navigate = useNavigate();
-  const criticalIncidents = [
-    { id: "INC-2024-001", type: "DDoS Attack", severity: "Critical", time: "2 mins ago", status: "Active" },
-    { id: "INC-2024-002", type: "Suspicious Login", severity: "High", time: "15 mins ago", status: "Investigating" },
-    { id: "INC-2024-003", type: "Malware Detection", severity: "Medium", time: "1 hour ago", status: "Contained" },
-  ];
+  
+  const { toast } = useToast();
+  
+  const handleSendSecurityCode = async () => {
+    setIsSendingCode(true);
+    
+    try {
+      const response = await fetch('http://localhost:3001/api/send-security-code', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' }
+      });
+
+      const data = await response.json();
+
+      if (!data.success) {
+        console.error('Failed to send security code:', data.error);
+      } else {
+        console.log('Security code sent successfully:', data.code);
+        // Refresh incidents immediately to show the new event
+        fetchIncidents();
+      }
+    } catch (error) {
+      console.error('Error sending security code:', error);
+    } finally {
+      setIsSendingCode(false);
+    }
+  };
+  
+  // Real-time incidents state
+  const [criticalIncidents, setCriticalIncidents] = useState<any[]>([]);
+  const [isLoadingIncidents, setIsLoadingIncidents] = useState(true);
+  const [lastUpdate, setLastUpdate] = useState<string>('');
+
+  // Fetch incidents from API
+  const fetchIncidents = async () => {
+    try {
+      const response = await fetch('http://localhost:3001/api/recent-incidents?limit=5');
+      const data = await response.json();
+
+      if (data.success) {
+        setCriticalIncidents(data.incidents);
+        setLastUpdate(new Date().toLocaleTimeString());
+      }
+    } catch (error) {
+      console.error('Failed to fetch incidents:', error);
+      // Keep existing data on error
+    } finally {
+      setIsLoadingIncidents(false);
+    }
+  };
+
+  // Auto-refresh every 30 seconds
+  useEffect(() => {
+    // Initial fetch
+    fetchIncidents();
+
+    // Set up auto-refresh
+    const interval = setInterval(() => {
+      fetchIncidents();
+    }, 30000); // 30 seconds
+
+    // Cleanup
+    return () => clearInterval(interval);
+  }, []);
 
   const systemMetrics = [
     { label: "Network Health", value: "98.7%", status: "success" },
@@ -107,41 +168,104 @@ const Dashboard = () => {
         {/* Critical Incidents */}
         <Card className="lg:col-span-2 card-gradient border-border/50">
           <CardHeader>
-            <CardTitle className="flex items-center space-x-2">
-              <AlertTriangle className="h-5 w-5 text-danger" />
-              <span>Active Security Incidents</span>
-            </CardTitle>
-            <CardDescription>Real-time incident tracking and response</CardDescription>
+            <div className="flex items-center justify-between">
+              <CardTitle className="flex items-center space-x-2">
+                <AlertTriangle className="h-5 w-5 text-danger" />
+                <span>Active Security Incidents</span>
+              </CardTitle>
+              {lastUpdate && (
+                <Badge variant="outline" className="text-xs">
+                  <Clock className="h-3 w-3 mr-1" />
+                  Last update: {lastUpdate}
+                </Badge>
+              )}
+            </div>
+            <CardDescription>Real-time incident tracking and response • Auto-refresh: 30s</CardDescription>
           </CardHeader>
           <CardContent>
-            <div className="space-y-4">
-              {criticalIncidents.map((incident) => (
-                <div key={incident.id} className="p-4 bg-muted/30 rounded-lg border border-border/50">
-                  <div className="flex items-center justify-between mb-2">
-                    <h4 className="font-semibold text-foreground">{incident.type}</h4>
-                    <Badge 
-                      variant="outline" 
-                      className={
-                        incident.severity === 'Critical' ? 'status-critical pulse-danger' :
-                        incident.severity === 'High' ? 'status-warning' : 'status-info'
-                      }
-                    >
-                      {incident.severity}
-                    </Badge>
+            {isLoadingIncidents ? (
+              <div className="space-y-4">
+                {[1, 2, 3].map((i) => (
+                  <div key={i} className="p-4 bg-muted/20 rounded-lg border border-border/30 animate-pulse">
+                    <div className="h-4 bg-muted/50 rounded w-3/4 mb-2"></div>
+                    <div className="h-3 bg-muted/30 rounded w-1/2"></div>
                   </div>
-                  <div className="flex items-center justify-between text-sm">
-                    <span className="text-muted-foreground">ID: {incident.id}</span>
-                    <div className="flex items-center space-x-4">
-                      <span className="text-muted-foreground flex items-center">
-                        <Clock className="h-3 w-3 mr-1" />
-                        {incident.time}
-                      </span>
-                      <Badge variant="secondary" className="text-xs">{incident.status}</Badge>
+                ))}
+              </div>
+            ) : criticalIncidents.length === 0 ? (
+              <div className="text-center py-12">
+                <Shield className="h-12 w-12 mx-auto text-muted-foreground/50 mb-4" />
+                <p className="text-muted-foreground">No active incidents detected</p>
+                <p className="text-sm text-muted-foreground/70 mt-1">System operating normally</p>
+              </div>
+            ) : (
+              <div className="space-y-4">
+                {criticalIncidents.map((incident) => (
+                  <div 
+                    key={incident.id} 
+                    className="group relative p-4 bg-card/50 hover:bg-card/80 rounded-xl border border-border/50 hover:border-primary/50 transition-all duration-300 cursor-pointer overflow-hidden"
+                    onClick={() => navigate("/incidents")}
+                  >
+                    {/* Hover Glow Effect */}
+                    <div className="absolute inset-0 bg-gradient-to-r from-primary/5 to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-300" />
+                    
+                    <div className="relative z-10">
+                      <div className="flex items-start justify-between mb-3">
+                        <div className="flex items-center space-x-3">
+                          <div className={`p-2 rounded-lg ${
+                            incident.severity === 'Critical' ? 'bg-red-500/10 text-red-500' :
+                            incident.severity === 'High' ? 'bg-orange-500/10 text-orange-500' :
+                            'bg-blue-500/10 text-blue-500'
+                          }`}>
+                            <Shield className="h-5 w-5" />
+                          </div>
+                          <div>
+                            <h4 className="font-semibold text-foreground group-hover:text-primary transition-colors">
+                              {incident.type}
+                            </h4>
+                            <p className="text-xs text-muted-foreground font-mono mt-0.5">
+                              {incident.id}
+                            </p>
+                          </div>
+                        </div>
+                        <Badge 
+                          variant="outline" 
+                          className={`px-3 py-1 ${
+                            incident.severity === 'Critical' ? 'border-red-500/50 text-red-500 bg-red-500/5' :
+                            incident.severity === 'High' ? 'border-orange-500/50 text-orange-500 bg-orange-500/5' :
+                            'border-blue-500/50 text-blue-500 bg-blue-500/5'
+                          }`}
+                        >
+                          {incident.severity}
+                        </Badge>
+                      </div>
+                      
+                      <div className="flex items-center justify-between text-sm pl-[3.25rem]">
+                        <div className="flex items-center space-x-4">
+                          <Badge variant="secondary" className={`text-xs ${
+                            incident.status === 'Active' ? 'bg-red-500/10 text-red-500 animate-pulse' :
+                            incident.status === 'Investigating' ? 'bg-yellow-500/10 text-yellow-500' :
+                            'bg-green-500/10 text-green-500'
+                          }`}>
+                            {incident.status === 'Active' && <div className="w-1.5 h-1.5 rounded-full bg-red-500 mr-1.5" />}
+                            {incident.status}
+                          </Badge>
+                          <span className="text-muted-foreground/60 text-xs flex items-center">
+                            <Clock className="h-3 w-3 mr-1" />
+                            {incident.time}
+                          </span>
+                        </div>
+                        
+                        {/* Arrow icon that appears on hover */}
+                        <div className="opacity-0 group-hover:opacity-100 transition-opacity transform translate-x-[-10px] group-hover:translate-x-0 duration-300">
+                          <TrendingUp className="h-4 w-4 text-primary" />
+                        </div>
+                      </div>
                     </div>
                   </div>
-                </div>
-              ))}
+                ))}
             </div>
+            )}
             <div className="flex space-x-2 mt-4">
               <Button size="sm" className="glow-primary" onClick={() => navigate("/incidents")}>
                 <Eye className="h-4 w-4 mr-2" />
@@ -150,6 +274,10 @@ const Dashboard = () => {
               <Button variant="outline" size="sm" onClick={() => navigate("/ai-analysis")}>
                 <Search className="h-4 w-4 mr-2" />
                 AI Analysis
+              </Button>
+              <Button variant="outline" size="sm" onClick={handleSendSecurityCode} disabled={isSendingCode}>
+                <BarChart3 className="h-4 w-4 mr-2" />
+                {isSendingCode ? 'Sending...' : 'Code Weight'}
               </Button>
             </div>
           </CardContent>
