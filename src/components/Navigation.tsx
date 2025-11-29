@@ -1,13 +1,12 @@
 import { useState } from "react";
 import { Link, useLocation, useNavigate } from "react-router-dom";
 import { Button } from "@/components/ui/button";
-import { 
-  Shield, 
-  Home, 
-  Search, 
-  Brain, 
-  FileText, 
-  Settings, 
+import {
+  Home,
+  Search,
+  Brain,
+  FileText,
+  Settings,
   LogOut,
   Menu,
   X,
@@ -15,6 +14,7 @@ import {
   Database
 } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
+import logo from "@/assets/Background-removebg-preview.png";
 
 const Navigation = () => {
   const [isOpen, setIsOpen] = useState(false);
@@ -65,14 +65,11 @@ const Navigation = () => {
         {/* Header */}
         <div className="p-6 border-b border-border/50">
           <div className="flex items-center space-x-3">
-            <div className="p-2 bg-primary/20 rounded-lg glow-primary">
-              <Shield className="h-6 w-6 text-primary" />
-            </div>
+            <img src={logo} alt="VectorVault Logo" className="h-16 w-16" />
             <div>
-              <h1 className="text-lg font-bold bg-gradient-to-r from-primary to-primary-glow bg-clip-text text-transparent">
+              <h1 className="text-lg font-bold bg-gradient-to-r from-primary to-primary-glow bg-clip-text text-transparent" style={{ fontFamily: "Bank Gothic", fontWeight: "bold", fontSize: "1.5rem" }}>
                 VectorVault
               </h1>
-              <p className="text-xs text-muted-foreground">Security Operations</p>
             </div>
           </div>
         </div>

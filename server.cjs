@@ -5,9 +5,22 @@ const promClient = require('prom-client');
 const rateLimit = require('express-rate-limit');
 require('dotenv').config();
 const path = require('path');
+const Database = require('better-sqlite3');
 
 const app = express();
 const PORT = process.env.PORT || 3001;
+
+// SQLite Database Connection
+const DB_PATH = process.env.SQLITE_DB_PATH || path.join(require('os').homedir(), 'Desktop', 'your-database.db');
+let sqliteDb = null;
+
+try {
+  sqliteDb = new Database(DB_PATH, { readonly: true });
+  console.log(`Connected to SQLite database at: ${DB_PATH}`);
+} catch (error) {
+  console.error('Failed to connect to SQLite database:', error.message);
+  console.log('SQLite predictions will use mock mode');
+}
 
 // Middleware
 app.use(cors());
@@ -438,6 +451,195 @@ app.post('/api/vector-search', async (req, res) => {
     }
   } catch (error) {
     res.status(500).json({ error: error.message });
+  }
+});
+
+// ML Prediction Endpoint
+app.post('/api/predict-attack', async (req, res) => {
+  try {
+    const { part1, part2, part3 } = req.body;
+
+    // Validate inputs
+    if (part1 === undefined || part2 === undefined || part3 === undefined) {
+      return res.status(400).json({ 
+        error: 'Missing input parameters. Please provide part1, part2, and part3.' 
+      });
+    }
+
+    // Convert inputs to numbers
+    const input1 = parseInt(part1) || 0;
+    const input2 = parseInt(part2) || 0;
+    const input3 = parseInt(part3) || 0;
+    
+    const inputVector = [input1, input2, input3];
+    const inputVectorStr = JSON.stringify(inputVector);
+
+    console.log(`Predicting attack for input vector: ${inputVectorStr}`);
+
+    // ===============================================
+    // ML MODEL PREDICTION - TensorFlow via Python
+    // ===============================================
+    let predictedAttackName = 'Unknown Attack';
+    let confidence = 0.75;
+
+    try {
+      // Call Python ML model
+      const { spawn } = require('child_process');
+      const pythonProcess = spawn('python3', [
+        path.join(__dirname, 'ml_classifier.py'),
+        input1.toString(),
+        input2.toString(),
+        input3.toString()
+      ]);
+
+      let pythonOutput = '';
+      let pythonError = '';
+
+      // Collect output
+      pythonProcess.stdout.on('data', (data) => {
+        pythonOutput += data.toString();
+      });
+
+      pythonProcess.stderr.on('data', (data) => {
+        pythonError += data.toString();
+      });
+
+      // Wait for completion
+      await new Promise((resolve, reject) => {
+        pythonProcess.on('close', (code) => {
+          if (code === 0) {
+            try {
+              const mlResult = JSON.parse(pythonOutput.trim());
+              if (mlResult.error) {
+                console.error('ML Model Error:', mlResult.error);
+                reject(new Error(mlResult.error));
+              } else {
+                predictedAttackName = mlResult.attackName;
+                confidence = mlResult.confidence;
+                console.log(`ML Prediction: ${predictedAttackName} (${(confidence * 100).toFixed(2)}%)`);
+                resolve();
+              }
+            } catch (parseError) {
+              console.error('Failed to parse ML output:', pythonOutput);
+              reject(parseError);
+            }
+          } else {
+            console.error('Python process failed:', pythonError);
+            reject(new Error(`Python process exited with code ${code}`));
+          }
+        });
+      });
+    } catch (mlError) {
+      console.error('ML Model execution failed:', mlError.message);
+      console.log('Falling back to rule-based prediction');
+      
+      // Fallback to simple rules if ML fails
+      if (input1 === 1 && input2 === 0 && input3 === 0) {
+        predictedAttackName = 'Distributed Denial of Service (DDoS)';
+        confidence = 0.95;
+      } else if (input1 === 0 && input2 === 1 && input3 === 0) {
+        predictedAttackName = 'SQL Injection (SQLi)';
+        confidence = 0.92;
+      } else if (input1 === 0 && input2 === 0 && input3 === 1) {
+        predictedAttackName = 'Phishing Attack';
+        confidence = 0.88;
+      } else {
+        predictedAttackName ='Unknown Attack Pattern';
+        confidence = 0.50;
+      }
+    }
+
+    // ===============================================
+    // DATABASE QUERY
+    // ===============================================
+    let summary = null;
+    let points = null;
+    let attackDetails = null;
+
+    if (sqliteDb) {
+      try {
+        // Query the attack_details_ref table
+        const stmt = sqliteDb.prepare(`
+          SELECT id, attack_name, summary, points 
+          FROM attack_details_ref 
+          WHERE attack_name = ?
+        `);
+        
+        attackDetails = stmt.get(predictedAttackName);
+
+        if (attackDetails) {
+          summary = attackDetails.summary;
+          points = attackDetails.points;
+          console.log(`Found attack details for: ${predictedAttackName}`);
+        } else {
+          console.log(`No database entry found for: ${predictedAttackName}`);
+        }
+
+        // Store prediction in predictions table
+        try {
+          const insertStmt = sqliteDb.prepare(`
+            INSERT INTO predictions (input_vector, predicted_attack_name, confidence, summary, points)
+            VALUES (?, ?, ?, ?, ?)
+          `);
+          
+          insertStmt.run(inputVectorStr, predictedAttackName, confidence, summary, points);
+          console.log('Prediction saved to database');
+        } catch (insertError) {
+          // If database is readonly, this will fail silently
+          console.log('Could not save prediction (database may be readonly)');
+        }
+
+      } catch (dbError) {
+        console.error('Database query error:', dbError.message);
+        // Continue with prediction even if DB query fails
+      }
+    } else {
+      console.log('SQLite database not connected, using mock data');
+      // Mock data when database is not available
+      if (predictedAttackName === 'Distributed Denial of Service (DDoS)') {
+        summary = 'A DDoS attack attempts to make a machine or network resource unavailable by overwhelming it with traffic from multiple sources.';
+        points = JSON.stringify([
+          'Use traffic filtering and rate limiting',
+          'Deploy CDN and load balancers',
+          'Implement DDoS protection services',
+          'Monitor network traffic patterns'
+        ]);
+      }
+    }
+
+    // Parse points if it's a JSON string
+    let pointsArray = [];
+    if (points) {
+      try {
+        pointsArray = typeof points === 'string' ? JSON.parse(points) : points;
+      } catch {
+        pointsArray = points.split('\n').filter(Boolean);
+      }
+    }
+
+    // ===============================================
+    // RESPONSE
+    // ===============================================
+    res.json({
+      success: true,
+      input: inputVector,
+      prediction: {
+        attackName: predictedAttackName,
+        confidence: confidence,
+        summary: summary || 'No detailed information available for this attack type.',
+        points: pointsArray,
+        foundInDatabase: !!attackDetails
+      },
+      timestamp: new Date().toISOString()
+    });
+
+  } catch (error) {
+    console.error('Prediction error:', error);
+    res.status(500).json({ 
+      success: false,
+      error: error.message,
+      details: 'An error occurred during attack prediction'
+    });
   }
 });
 

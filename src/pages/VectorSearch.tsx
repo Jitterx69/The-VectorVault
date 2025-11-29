@@ -23,10 +23,15 @@ import {
 } from "lucide-react";
 
 const VectorSearch = () => {
-  const [searchQuery, setSearchQuery] = useState("");
+  const [part1, setPart1] = useState("");
+  const [part2, setPart2] = useState("");
+  const [part3, setPart3] = useState("");
   const [showAdvancedFilters, setShowAdvancedFilters] = useState(false);
   const [appliedFilters, setAppliedFilters] = useState<any>(null);
   const [recentSearches, setRecentSearches] = useState<string[]>([]);
+  const [predictionResult, setPredictionResult] = useState<any>(null);
+  const [isPredicting, setIsPredicting] = useState(false);
+  const [predictionError, setPredictionError] = useState<string | null>(null);
   
   const { toast } = useToast();
   const { isConnected, isConnecting, error: connectionError } = useTiDBConnection();
@@ -34,25 +39,64 @@ const VectorSearch = () => {
   const { stats, isLoading: statsLoading } = useSearchStats();
 
   const handleSearch = async () => {
-    if (!searchQuery.trim()) return;
+    const searchQuery = `${part1} ${part2} ${part3}`.trim();
+    if (!searchQuery) return;
     
-    // Add to recent searches
-    if (!recentSearches.includes(searchQuery)) {
-      setRecentSearches(prev => [searchQuery, ...prev.slice(0, 4)]);
+    setIsPredicting(true);
+    setPredictionError(null);
+    setPredictionResult(null);
+
+    try {
+      // Call ML prediction endpoint
+      const response = await fetch('http://localhost:3001/api/predict-attack', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ part1, part2, part3 })
+      });
+
+      if (!response.ok) {
+        throw new Error('Prediction failed');
+      }
+
+      const data = await response.json();
+      
+      if (data.success) {
+        setPredictionResult(data);
+        
+        // Add to recent searches
+        if (!recentSearches.includes(searchQuery)) {
+          setRecentSearches(prev => [searchQuery, ...prev.slice(0, 4)]);
+        }
+
+        toast({
+          title: "Attack Predicted",
+          description: `Identified as ${data.prediction.attackName} with ${Math.round(data.prediction.confidence * 100)}% confidence`,
+        });
+      } else {
+        throw new Error(data.error || 'Prediction failed');
+      }
+    } catch (error) {
+      const errorMessage = error instanceof Error ? error.message : 'Prediction failed';
+      setPredictionError(errorMessage);
+      toast({
+        title: "Prediction Error",
+        description: errorMessage,
+        variant: "destructive",
+      });
+    } finally {
+      setIsPredicting(false);
     }
-    
-    await performSearch(searchQuery, appliedFilters || {}, 10);
   };
 
   // Initialize with some default recent searches
   useEffect(() => {
     if (recentSearches.length === 0) {
       setRecentSearches([
-        "SQL injection attempts database compromise",
-        "Malware detection email gateway",
-        "Brute force authentication failure",
-        "Data exfiltration suspicious activity",
-        "Phishing campaign user credentials"
+        "1 * *",
+        "0 * *",
+        "0 * *",
+        "0 * *",
+        "1 * *"
       ]);
     }
   }, [recentSearches.length]);
@@ -81,7 +125,11 @@ const VectorSearch = () => {
 
   const handleClearSearch = () => {
     clearSearch();
-    setSearchQuery("");
+    setPart1("");
+    setPart2("");
+    setPart3("");
+    setPredictionResult(null);
+    setPredictionError(null);
   };
 
   const handleApplySolution = (result: any) => {
@@ -89,6 +137,12 @@ const VectorSearch = () => {
       title: "Solution Applied",
       description: `Applying resolution from incident ${result.incident} to current situation`,
     });
+  };
+
+  const handleNumericInput = (value: string, setter: (val: string) => void) => {
+    if (/^\d*$/.test(value)) {
+      setter(value);
+    }
   };
 
   return (
@@ -127,20 +181,34 @@ const VectorSearch = () => {
         <CardHeader>
           <CardTitle className="flex items-center space-x-2">
             <Database className="h-5 w-5 text-primary" />
-            <span>Intelligent Search Query</span>
+            <span>Search By Code</span>
           </CardTitle>
           <CardDescription>
-            Describe your incident or search for similar security events using natural language
+            Enter Your Security Code (Numerical Only)
           </CardDescription>
         </CardHeader>
         <CardContent className="space-y-4">
-          <div className="space-y-2">
-            <Textarea
-              placeholder="Describe the incident or security event you want to search for...&#10;Example: 'DDoS attack targeting web servers with high traffic volume'"
-              value={searchQuery}
-              onChange={(e) => setSearchQuery(e.target.value)}
-              className="min-h-[120px] bg-input/50 border-border/50 focus:border-primary"
-              rows={4}
+          <div className="grid grid-cols-3 gap-4">
+            <Input
+              placeholder="Part 1"
+              value={part1}
+              onChange={(e) => handleNumericInput(e.target.value, setPart1)}
+              className="bg-input/50 border-border/50 focus:border-primary text-center text-lg tracking-widest"
+              maxLength={3}
+            />
+            <Input
+              placeholder="Part 2"
+              value={part2}
+              onChange={(e) => handleNumericInput(e.target.value, setPart2)}
+              className="bg-input/50 border-border/50 focus:border-primary text-center text-lg tracking-widest"
+              maxLength={3}
+            />
+            <Input
+              placeholder="Part 3"
+              value={part3}
+              onChange={(e) => handleNumericInput(e.target.value, setPart3)}
+              className="bg-input/50 border-border/50 focus:border-primary text-center text-lg tracking-widest"
+              maxLength={3}
             />
           </div>
           
@@ -158,18 +226,18 @@ const VectorSearch = () => {
               </div>
             <Button 
               onClick={handleSearch}
-              disabled={!searchQuery.trim() || isSearching || !isConnected}
+              disabled={(!part1 && !part2 && !part3) || isPredicting}
               className="glow-primary"
             >
-              {isSearching ? (
+              {isPredicting ? (
                 <div className="flex items-center space-x-2">
                   <div className="w-4 h-4 border-2 border-primary-foreground/30 border-t-primary-foreground rounded-full animate-spin" />
-                  <span>Searching...</span>
+                  <span>Predicting...</span>
                 </div>
               ) : (
                 <>
                   <Search className="h-4 w-4 mr-2" />
-                  Search Similar Incidents
+                  Predict Attack
                 </>
               )}
             </Button>
@@ -179,92 +247,120 @@ const VectorSearch = () => {
 
       <div className="grid grid-cols-1 lg:grid-cols-4 gap-6">
         
-        {/* Search Results */}
+        {/* Prediction Results */}
         <div className="lg:col-span-3 space-y-4">
-          {searchError && (
+          {predictionError && (
             <Card className="card-gradient border-destructive/50">
               <CardContent className="p-4">
                 <div className="flex items-center space-x-2 text-destructive">
                   <AlertCircle className="h-4 w-4" />
-                  <span>Search Error: {searchError}</span>
+                  <span>Prediction Error: {predictionError}</span>
                 </div>
               </CardContent>
             </Card>
           )}
 
-          {searchQuery && (
+          {predictionResult && (
             <>
               <div className="flex items-center justify-between">
-                <h2 className="text-xl font-semibold">Search Results</h2>
+                <h2 className="text-xl font-semibold">Prediction Result</h2>
                 <div className="flex items-center space-x-2">
-                  <Badge variant="outline" className="status-success">
-                    {searchResults.length} matches found
+                  <Badge variant="outline" className={getSimilarityBg(predictionResult.prediction.confidence)}>
+                    <Target className="h-3 w-3 mr-1" />
+                    {Math.round(predictionResult.prediction.confidence * 100)}% confidence
                   </Badge>
-                  {searchResults.length > 0 && (
-                    <Button size="sm" variant="outline" onClick={handleClearSearch}>
-                      Clear Results
-                    </Button>
-                  )}
+                  <Button size="sm" variant="outline" onClick={handleClearSearch}>
+                    Clear Result
+                  </Button>
                 </div>
               </div>
 
-              {searchResults.map((result) => (
-                <Card key={result.id} className="card-gradient border-border/50 hover:border-primary/30 transition-colors">
-                  <CardContent className="p-6">
-                    <div className="flex items-start justify-between mb-4">
+              <Card className="card-gradient border-primary/30 hover:border-primary/50 transition-colors glow-primary">
+                <CardContent className="p-6">
+                  <div className="space-y-6">
+                    {/* Attack Name Header */}
+                    <div className="flex items-start justify-between">
                       <div className="flex-1">
                         <div className="flex items-center space-x-3 mb-2">
-                          <h3 className="text-lg font-semibold">{result.title}</h3>
-                          <Badge variant="outline" className={getSimilarityBg(result.similarity || 0)}>
-                            <Crosshair className="h-3 w-3 mr-1" />
-                            {Math.round((result.similarity || 0) * 100)}% match
-                          </Badge>
+                          <Zap className="h-6 w-6 text-warning animate-pulse" />
+                          <h3 className="text-2xl font-bold bg-gradient-to-r from-warning to-destructive bg-clip-text text-transparent">
+                            {predictionResult.prediction.attackName}
+                          </h3>
                         </div>
-                        <p className="text-sm text-muted-foreground mb-3">{result.description}</p>
-                        
-                        <div className="bg-muted/20 p-3 rounded-lg mb-3">
-                          <p className="text-sm"><span className="font-medium text-success">Resolution:</span> {result.resolution}</p>
-                        </div>
-
-                        <div className="flex flex-wrap gap-2 mb-3">
-                          {result.tags.map((tag) => (
-                            <Badge key={tag} variant="secondary" className="text-xs">
-                              #{tag}
-                            </Badge>
-                          ))}
-                        </div>
-                      </div>
-                      <div className={`text-right ml-4 font-mono text-2xl font-bold ${getSimilarityColor(result.similarity || 0)}`}>
-                        {Math.round((result.similarity || 0) * 100)}%
-                      </div>
-                    </div>
-                    
-                    <div className="flex items-center justify-between">
-                                              <div className="flex items-center space-x-4 text-sm text-muted-foreground">
-                          <span>ID: {result.id}</span>
-                          <span>Category: {result.category}</span>
+                        <div className="flex items-center space-x-2 text-sm text-muted-foreground">
+                          <span>Input Vector: [{predictionResult.input.join(', ')}]</span>
+                          <span>•</span>
                           <span className="flex items-center">
                             <Clock className="h-3 w-3 mr-1" />
-                            {result.timestamp}
+                            {new Date(predictionResult.timestamp).toLocaleString()}
                           </span>
                         </div>
-                      <div className="flex space-x-2">
-                        <Button size="sm" variant="outline">
-                          View Full Details
-                        </Button>
-                        <Button size="sm" className="glow-primary" onClick={() => handleApplySolution(result)}>
-                          Apply Solution
-                          <ArrowRight className="h-4 w-4 ml-2" />
-                        </Button>
+                      </div>
+                      <div className={`text-right ml-4 font-mono text-3xl font-bold ${getSimilarityColor(predictionResult.prediction.confidence)}`}>
+                        {Math.round(predictionResult.prediction.confidence * 100)}%
                       </div>
                     </div>
-                  </CardContent>
-                </Card>
-              ))}
+
+                    {/* Summary Section */}
+                    <div className="bg-muted/30 p-4 rounded-lg border border-border/30">
+                      <h4 className="font-semibold mb-2 flex items-center">
+                        <AlertCircle className="h-4 w-4 mr-2 text-primary" />
+                        Attack Summary
+                      </h4>
+                      <p className="text-sm leading-relaxed">
+                        {predictionResult.prediction.summary}
+                      </p>
+                    </div>
+
+                    {/* Mitigation Points */}
+                    {predictionResult.prediction.points && predictionResult.prediction.points.length > 0 && (
+                      <div className="bg-success/10 p-4 rounded-lg border border-success/30">
+                        <h4 className="font-semibold mb-3 flex items-center text-success">
+                          <CheckCircle className="h-4 w-4 mr-2" />
+                          Recommended Actions
+                        </h4>
+                        <ul className="space-y-2">
+                          {predictionResult.prediction.points.map((point: string, index: number) => (
+                            <li key={index} className="flex items-start space-x-2 text-sm">
+                              <span className="text-success mt-0.5">✓</span>
+                              <span>{point}</span>
+                            </li>
+                          ))}
+                        </ul>
+                      </div>
+                    )}
+
+                    {/* Database Status */}
+                    <div className="flex items-center justify-between pt-4 border-t border-border/30">
+                      <div className="flex items-center space-x-2 text-sm">
+                        <Database className="h-4 w-4 text-muted-foreground" />
+                        <span className="text-muted-foreground">
+                          Database Lookup: 
+                        </span>
+                        {predictionResult.prediction.foundInDatabase ? (
+                          <Badge variant="outline" className="bg-success/20 border-success/30 text-success">
+                            <CheckCircle className="h-3 w-3 mr-1" />
+                            Found
+                          </Badge>
+                        ) : (
+                          <Badge variant="outline" className="bg-warning/20 border-warning/30 text-warning">
+                            <AlertCircle className="h-3 w-3 mr-1" />
+                            Not in Database
+                          </Badge>
+                        )}
+                      </div>
+                      <Button className="glow-primary">
+                        Generate Full Report
+                        <ArrowRight className="h-4 w-4 ml-2" />
+                      </Button>
+                    </div>
+                  </div>
+                </CardContent>
+              </Card>
             </>
           )}
 
-          {!searchQuery && (
+          {(!part1 && !part2 && !part3 && !predictionResult) && (
             <Card className="card-gradient border-border/50 text-center p-12">
               <div className="flex flex-col items-center space-y-4">
                 <div className="p-4 bg-primary/20 rounded-full glow-primary">
@@ -294,7 +390,12 @@ const VectorSearch = () => {
               {recentSearches.map((search, index) => (
                 <button
                   key={index}
-                  onClick={() => setSearchQuery(search)}
+                  onClick={() => {
+                    const parts = search.split(" ");
+                    setPart1(parts[0] || "");
+                    setPart2(parts[1] || "");
+                    setPart3(parts[2] || "");
+                  }}
                   className="w-full text-left p-2 text-sm bg-muted/20 hover:bg-muted/40 rounded border border-border/30 transition-colors"
                 >
                   {search}

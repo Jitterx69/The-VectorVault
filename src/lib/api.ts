@@ -35,6 +35,19 @@ export interface SearchStats {
   avgResponseTime: number;
 }
 
+export interface AttackPrediction {
+  success: boolean;
+  input: number[];
+  prediction: {
+    attackName: string;
+    confidence: number;
+    summary: string;
+    points: string[];
+    foundInDatabase: boolean;
+  };
+  timestamp: string;
+}
+
 class ApiClient {
   private async request<T>(endpoint: string, options?: RequestInit): Promise<T> {
     const response = await fetch(`${API_BASE_URL}${endpoint}`, {
@@ -74,6 +87,17 @@ class ApiClient {
     return this.request('/vector-search', {
       method: 'POST',
       body: JSON.stringify({ query, filters, limit }),
+    });
+  }
+
+  async predictAttack(
+    part1: string,
+    part2: string,
+    part3: string
+  ): Promise<AttackPrediction> {
+    return this.request('/predict-attack', {
+      method: 'POST',
+      body: JSON.stringify({ part1, part2, part3 }),
     });
   }
 

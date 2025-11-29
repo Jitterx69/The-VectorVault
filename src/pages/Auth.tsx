@@ -4,8 +4,9 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
-import { Shield, Lock, User } from "lucide-react";
+import { Lock, User } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
+import logo from "@/assets/Background-removebg-preview.png";
 
 const Auth = () => {
   const [username, setUsername] = useState("");
@@ -52,14 +53,12 @@ const Auth = () => {
       <Card className="w-full max-w-md relative z-10 card-gradient border-border/50 glow-primary">
         <CardHeader className="text-center space-y-4">
           <div className="flex items-center justify-center space-x-3 mb-4">
-            <div className="p-3 bg-primary/20 rounded-lg glow-primary">
-              <Shield className="h-8 w-8 text-primary" />
-            </div>
+            <img src={logo} alt="VectorVault Logo" className="h-16 w-16" />
             <div>
               <h1 className="text-2xl font-bold bg-gradient-to-r from-primary to-primary-glow bg-clip-text text-transparent">
                 VectorVault
               </h1>
-              <p className="text-xs text-muted-foreground">Security Operations Center</p>
+              <p className="text-xs text-muted-foreground">Skyraa PEAR Engine v1</p>
             </div>
           </div>
           <CardTitle className="text-xl">Secure Access Portal</CardTitle>
@@ -114,11 +113,7 @@ const Auth = () => {
               )}
             </Button>
           </form>
-          
-          <div className="mt-6 text-center text-xs text-muted-foreground">
-            <p>Secured By A.S.T.R.A</p>
-          </div>
-        </CardContent>
+        </CardContent> 
       </Card>
     </div>
   );

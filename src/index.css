@@ -2,6 +2,12 @@
 @tailwind components;
 @tailwind utilities;
 
+/* Import Bank Gothic font */
+@font-face {
+  font-family: 'Bank Gothic';
+  src: local('Bank Gothic');
+}
+
 /* VectorVault Security Dashboard Design System */
 
 @layer base {
