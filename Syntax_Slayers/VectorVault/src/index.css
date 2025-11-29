@@ -1,0 +1,173 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* Import Bank Gothic font */
+@font-face {
+  font-family: 'Bank Gothic';
+  src: local('Bank Gothic');
+}
+
+/* VectorVault Security Dashboard Design System */
+
+@layer base {
+  :root {
+    /* Core Brand Colors - Cybersecurity Theme */
+    --background: 222 47% 3%;
+    --foreground: 210 40% 98%;
+    
+    --card: 222 47% 6%;
+    --card-foreground: 210 40% 98%;
+    
+    --popover: 222 47% 4%;
+    --popover-foreground: 210 40% 98%;
+    
+    /* Primary - Electric Blue */
+    --primary: 199 89% 48%;
+    --primary-foreground: 222 47% 3%;
+    --primary-glow: 199 89% 60%;
+    
+    /* Secondary - Deep Slate */
+    --secondary: 222 47% 11%;
+    --secondary-foreground: 210 40% 98%;
+    
+    /* Status Colors */
+    --success: 142 71% 45%;
+    --success-foreground: 210 40% 98%;
+    --warning: 38 92% 50%;
+    --warning-foreground: 222 47% 3%;
+    --danger: 0 84% 60%;
+    --danger-foreground: 210 40% 98%;
+    
+    /* Muted Elements */
+    --muted: 222 47% 8%;
+    --muted-foreground: 215 20% 65%;
+    
+    --accent: 199 89% 48%;
+    --accent-foreground: 222 47% 3%;
+    
+    --destructive: 0 84% 60%;
+    --destructive-foreground: 210 40% 98%;
+    
+    /* Borders & Inputs */
+    --border: 222 47% 15%;
+    --input: 222 47% 12%;
+    --ring: 199 89% 48%;
+    
+    --radius: 0.75rem;
+    
+    /* Gradients */
+    --gradient-primary: linear-gradient(135deg, hsl(var(--primary)), hsl(var(--primary-glow)));
+    --gradient-danger: linear-gradient(135deg, hsl(var(--danger)), hsl(0 84% 70%));
+    --gradient-success: linear-gradient(135deg, hsl(var(--success)), hsl(142 71% 55%));
+    --gradient-card: linear-gradient(145deg, hsl(var(--card)), hsl(222 47% 8%));
+    
+    /* Shadows */
+    --shadow-glow: 0 0 30px hsl(var(--primary) / 0.3);
+    --shadow-danger-glow: 0 0 30px hsl(var(--danger) / 0.3);
+    --shadow-card: 0 4px 20px hsl(222 47% 1% / 0.3);
+    
+    /* Animations */
+    --transition-smooth: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+    --transition-bounce: all 0.2s cubic-bezier(0.68, -0.55, 0.265, 1.55);
+
+    --sidebar-background: 0 0% 98%;
+
+    --sidebar-foreground: 240 5.3% 26.1%;
+
+    --sidebar-primary: 240 5.9% 10%;
+
+    --sidebar-primary-foreground: 0 0% 98%;
+
+    --sidebar-accent: 240 4.8% 95.9%;
+
+    --sidebar-accent-foreground: 240 5.9% 10%;
+
+    --sidebar-border: 220 13% 91%;
+
+    --sidebar-ring: 217.2 91.2% 59.8%;
+  }
+}
+
+@layer base {
+  * {
+    @apply border-border;
+  }
+
+  body {
+    @apply bg-background text-foreground font-mono;
+  }
+  
+  /* Custom scrollbar */
+  ::-webkit-scrollbar {
+    width: 6px;
+    height: 6px;
+  }
+  
+  ::-webkit-scrollbar-track {
+    background: hsl(var(--muted));
+  }
+  
+  ::-webkit-scrollbar-thumb {
+    background: hsl(var(--border));
+    border-radius: 3px;
+  }
+  
+  ::-webkit-scrollbar-thumb:hover {
+    background: hsl(var(--primary));
+  }
+}
+
+@layer components {
+  /* Status Badge Variants */
+  .status-critical {
+    @apply bg-gradient-to-r from-red-500/20 to-red-600/20 text-red-400 border border-red-500/30;
+  }
+  
+  .status-warning {
+    @apply bg-gradient-to-r from-yellow-500/20 to-orange-500/20 text-yellow-400 border border-yellow-500/30;
+  }
+  
+  .status-success {
+    @apply bg-gradient-to-r from-green-500/20 to-emerald-500/20 text-green-400 border border-green-500/30;
+  }
+  
+  .status-info {
+    @apply bg-gradient-to-r from-blue-500/20 to-cyan-500/20 text-blue-400 border border-blue-500/30;
+  }
+  
+  /* Glow Effects */
+  .glow-primary {
+    box-shadow: var(--shadow-glow);
+  }
+  
+  .glow-danger {
+    box-shadow: var(--shadow-danger-glow);
+  }
+  
+  /* Card Variants */
+  .card-gradient {
+    background: var(--gradient-card);
+  }
+  
+  /* Pulse Animation for Critical Alerts */
+  .pulse-danger {
+    animation: pulse-danger 2s infinite;
+  }
+  
+  @keyframes pulse-danger {
+    0%, 100% { 
+      box-shadow: 0 0 5px hsl(var(--danger) / 0.5);
+    }
+    50% { 
+      box-shadow: 0 0 20px hsl(var(--danger) / 0.8), 0 0 30px hsl(var(--danger) / 0.3);
+    }
+  }
+  
+  /* Matrix-style text effect for logs */
+  .matrix-text {
+    font-family: 'Courier New', monospace;
+    color: hsl(var(--success));
+    text-shadow: 0 0 5px hsl(var(--success) / 0.5);
+  }
+}
