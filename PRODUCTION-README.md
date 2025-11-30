@@ -1,7 +1,7 @@
-# 🚀 Incident Guard AI - Production Deployment Guide
+# 🚀 Vector Vault - Production Deployment Guide
 
 ## Overview
-Your Incident Guard AI application has been fully containerized and deployed with enterprise-grade scalability features. This guide covers the final production setup steps.
+Your Vector Vault application has been fully containerized and deployed with enterprise-grade scalability features. This guide covers the final production setup steps.
 
 ## ✅ Current Production Status
 
@@ -25,11 +25,11 @@ Your Incident Guard AI application has been fully containerized and deployed wit
 
 ### 1. Domain Configuration
 
-#### For Production Domain (e.g., incident-guard-ai.com):
+#### For Production Domain (e.g., vectorvault.ai):
 
 ```bash
 # Get the load balancer external IP
-kubectl get svc incident-guard-ai-service
+kubectl get svc vectorvault-service
 
 # Example output:
 # NAME                        TYPE           CLUSTER-IP      EXTERNAL-IP   PORT(S)
@@ -42,10 +42,10 @@ kubectl get svc incident-guard-ai-service
 #### Update Kubernetes Ingress:
 ```bash
 # Edit the ingress configuration
-kubectl edit ingress incident-guard-ai-ingress
+kubectl edit ingress vectorvault-ingress
 
 # Update spec.rules[0].host to your domain:
-# host: incident-guard-ai.com
+# host: vectorvault.ai
 ```
 
 ### 2. SSL Certificate Setup
@@ -62,7 +62,7 @@ kubectl edit clusterissuer letsencrypt-prod
 kubectl get certificate
 
 # Check certificate status
-kubectl describe certificate incident-guard-ai-tls
+kubectl describe certificate vectorvault-tls
 ```
 
 #### Manual Certificate (if needed):
@@ -112,7 +112,7 @@ kubectl rollout restart deployment incident-guard-ai-deployment
 # 2. Get replica endpoints
 
 # 2. Update database configuration
-kubectl edit configmap incident-guard-ai-config
+kubectl edit configmap vectorvault-config
 
 # Add replica configurations:
 # DB_REPLICA_1_HOST: "replica1.tidbcloud.com"
@@ -123,7 +123,7 @@ kubectl edit configmap incident-guard-ai-config
 kubectl apply -f k8s/database-replicas.yaml
 
 # 4. Update application environment
-kubectl set env deployment/incident-guard-ai-deployment \
+kubectl set env deployment/vectorvault-deployment \
   DB_READ_REPLICAS_ENABLED=true
 ```
 
@@ -173,10 +173,10 @@ kubectl get pods -w
 
 ```bash
 # Watch HPA scaling decisions
-kubectl describe hpa incident-guard-ai-hpa
+kubectl describe hpa vectorvault-hpa
 
 # Check pod scaling
-kubectl get pods -l app=incident-guard-ai
+kubectl get pods -l app=vectorvault
 
 # Monitor resource usage
 kubectl top pods
@@ -235,28 +235,28 @@ rate(container_cpu_usage_seconds_total{pod=~".*incident-guard-ai.*"}[5m])
 # Application logs are persistent
 
 # Backup PVC data
-kubectl cp incident-guard-ai-deployment-pod:/app/logs ./backups/
+kubectl cp vectorvault-deployment-pod:/app/logs ./backups/
 ```
 
 ### Update Deployment
 
 ```bash
 # Update application image
-kubectl set image deployment/incident-guard-ai-deployment \
-  incident-guard-ai=incident-guard-ai:v2.0.0
+kubectl set image deployment/vectorvault-deployment \
+  vectorvault=vectorvault:v2.0.0
 
 # Monitor rollout
-kubectl rollout status deployment/incident-guard-ai-deployment
+kubectl rollout status deployment/vectorvault-deployment
 
 # Rollback if needed
-kubectl rollout undo deployment/incident-guard-ai-deployment
+kubectl rollout undo deployment/vectorvault-deployment
 ```
 
 ### Scaling Configuration
 
 ```bash
 # Adjust HPA settings
-kubectl edit hpa incident-guard-ai-hpa
+kubectl edit hpa vectorvault-hpa
 
 # Example: More aggressive scaling
 # minReplicas: 3
@@ -309,11 +309,11 @@ kubectl edit hpa incident-guard-ai-hpa
 ## 📞 Support
 
 For production issues:
-1. Check application logs: `kubectl logs -f deployment/incident-guard-ai-deployment`
+1. Check application logs: `kubectl logs -f deployment/vectorvault-deployment`
 2. Monitor Grafana dashboards
 3. Check pod health: `kubectl get pods`
-4. Review HPA status: `kubectl describe hpa incident-guard-ai-hpa`
+4. Review HPA status: `kubectl describe hpa vectorvault-hpa`
 
 ---
 
-**Your Incident Guard AI application is now production-ready with enterprise-grade scalability and reliability!** 🚀
+**Your Vector Vault application is now production-ready with enterprise-grade scalability and reliability!** 🚀

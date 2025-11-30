@@ -145,6 +145,42 @@ const VectorSearch = () => {
     }
   };
 
+  const handleLogIncident = async () => {
+    if (!predictionResult) return;
+    
+    try {
+      const response = await fetch('http://localhost:3001/api/log-incident', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          attackName: predictionResult.prediction.attackName,
+          confidence: predictionResult.prediction.confidence,
+          inputVector: predictionResult.input,
+          summary: predictionResult.prediction.summary,
+          points: predictionResult.prediction.points
+        })
+      });
+      
+      const data = await response.json();
+      
+      if (data.success) {
+        toast({
+          title: "Incident Logged",
+          description: "The threat has been added to the active incidents list.",
+          className: "bg-green-500/20 border-green-500/30 text-green-500"
+        });
+      } else {
+        throw new Error(data.error);
+      }
+    } catch (error) {
+      toast({
+        title: "Logging Failed",
+        description: "Could not save the incident.",
+        variant: "destructive"
+      });
+    }
+  };
+
   return (
     <div className="space-y-6">
       
@@ -349,9 +385,9 @@ const VectorSearch = () => {
                           </Badge>
                         )}
                       </div>
-                      <Button className="glow-primary">
-                        Generate Full Report
-                        <ArrowRight className="h-4 w-4 ml-2" />
+                      <Button className="glow-primary" onClick={handleLogIncident}>
+                        <AlertCircle className="h-4 w-4 mr-2" />
+                        Log Incident
                       </Button>
                     </div>
                   </div>

@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -18,8 +18,10 @@ import {
   Download,
   TrendingUp,
   Users,
-  Shield
+  Shield,
+  CheckCircle
 } from "lucide-react";
+import SolveIncidentModal from "@/components/modals/SolveIncidentModal";
 
 const Incidents = () => {
   const [searchTerm, setSearchTerm] = useState("");
@@ -32,63 +34,56 @@ const Incidents = () => {
   
   const { toast } = useToast();
 
-  const incidents = [
-    {
-      id: "INC-2024-001",
-      title: "DDoS Attack on Web Infrastructure", 
-      severity: "Critical",
-      status: "Active",
-      assignee: "SOC Team Alpha",
-      created: "2024-01-15 14:30",
-      updated: "2 mins ago",
-      description: "Large-scale distributed denial-of-service attack detected on primary web servers",
-      tags: ["ddos", "web", "high-volume"]
-    },
-    {
-      id: "INC-2024-002",
-      title: "Suspicious Login Patterns",
-      severity: "High", 
-      status: "Investigating",
-      assignee: "Jane Smith",
-      created: "2024-01-15 13:45",
-      updated: "15 mins ago",
-      description: "Multiple failed login attempts from various geographic locations",
-      tags: ["auth", "brute-force", "geo-anomaly"]
-    },
-    {
-      id: "INC-2024-003", 
-      title: "Malware Detection in Email System",
-      severity: "Medium",
-      status: "Contained",
-      assignee: "Mike Johnson",
-      created: "2024-01-15 12:20",
-      updated: "1 hour ago",
-      description: "Malicious attachment detected and quarantined in email gateway",
-      tags: ["malware", "email", "quarantined"]
-    },
-    {
-      id: "INC-2024-004",
-      title: "Unauthorized Database Access Attempt",
-      severity: "High",
-      status: "Resolved",
-      assignee: "Security Team Beta", 
-      created: "2024-01-15 09:15",
-      updated: "3 hours ago",
-      description: "Failed attempt to access customer database from unknown IP",
-      tags: ["database", "unauthorized", "blocked"]
-    },
-    {
-      id: "INC-2024-005",
-      title: "SSL Certificate Expiration Alert",
-      severity: "Low",
-      status: "Scheduled",
-      assignee: "IT Operations",
-      created: "2024-01-15 08:00", 
-      updated: "4 hours ago",
-      description: "SSL certificate for api.company.com expires in 7 days",
-      tags: ["ssl", "certificate", "maintenance"]
-    }
-  ];
+  const [incidents, setIncidents] = useState<any[]>([]);
+
+  useEffect(() => {
+    const fetchIncidents = async () => {
+      try {
+        const response = await fetch('http://localhost:3001/api/recent-incidents?limit=20');
+        const data = await response.json();
+        
+        if (data.success) {
+          // Transform API data to match UI component structure if needed
+          // The API already returns a compatible structure based on our previous work
+          const backendIncidents = data.incidents.map((inc: any) => ({
+            id: inc.id,
+            title: inc.type, // Map 'type' to 'title'
+            severity: inc.severity,
+            status: inc.status,
+            assignee: "Automated System", // Default assignee
+            created: inc.time, // 'time' is "2 mins ago" etc.
+            updated: "Just now",
+            description: inc.summary || `Detected ${inc.type} with ${inc.confidence}% confidence.`,
+            tags: [inc.type.toLowerCase().replace(/\s+/g, '-'), "automated", "ai-detected"]
+          }));
+          
+          setIncidents(backendIncidents);
+        }
+      } catch (error) {
+        console.error("Failed to fetch incidents:", error);
+        // Fallback to static data if fetch fails
+        setIncidents([
+          {
+            id: "INC-2024-001",
+            title: "DDoS Attack on Web Infrastructure", 
+            severity: "Critical",
+            status: "Active",
+            assignee: "SOC Team Alpha",
+            created: "2024-01-15 14:30",
+            updated: "2 mins ago",
+            description: "Large-scale distributed denial-of-service attack detected on primary web servers",
+            tags: ["ddos", "web", "high-volume"]
+          }
+        ]);
+      }
+    };
+
+    fetchIncidents();
+    
+    // Poll every 10 seconds to keep list fresh
+    const interval = setInterval(fetchIncidents, 10000);
+    return () => clearInterval(interval);
+  }, []);
 
   const getSeverityColor = (severity: string) => {
     switch(severity) {
@@ -172,6 +167,73 @@ const Incidents = () => {
       });
     } finally {
       setInvestigatingId(null);
+    }
+  };
+
+  const [showSolveModal, setShowSolveModal] = useState(false);
+  const [solutionData, setSolutionData] = useState<any>(null);
+  const [solvingId, setSolvingId] = useState<string | null>(null);
+
+  const handleSolve = async (incident: any) => {
+    setSolvingId(incident.id);
+    try {
+      const response = await fetch('http://localhost:3001/api/get-solutions', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ type: incident.title })
+      });
+      
+      const data = await response.json();
+      
+      if (data.success) {
+        setSelectedIncident(incident);
+        setSolutionData(data.solution);
+        setShowSolveModal(true);
+      } else {
+        throw new Error(data.error);
+      }
+    } catch (error) {
+      toast({
+        title: "Error Fetching Solutions",
+        description: "Could not retrieve mitigation strategies.",
+        variant: "destructive"
+      });
+    } finally {
+      setSolvingId(null);
+    }
+  };
+
+  const handleAcceptSolution = async () => {
+    if (!selectedIncident) return;
+
+    try {
+      const response = await fetch('http://localhost:3001/api/resolve-incident', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ id: selectedIncident.id })
+      });
+      
+      const data = await response.json();
+      
+      if (data.success) {
+        setShowSolveModal(false);
+        
+        // Remove the resolved incident from the list
+        setIncidents(prev => prev.filter(inc => inc.id !== selectedIncident.id));
+        
+        // Show success dialog/toast
+        toast({
+          title: "Incident Resolved",
+          description: "Security patches applied and incident closed.",
+          className: "bg-green-500/20 border-green-500/30 text-green-500"
+        });
+      }
+    } catch (error) {
+      toast({
+        title: "Resolution Failed",
+        description: "Could not resolve the incident.",
+        variant: "destructive"
+      });
     }
   };
 
@@ -401,6 +463,19 @@ const Incidents = () => {
                   </Button>
                   <Button 
                     size="sm" 
+                    className="glow-primary bg-blue-600 hover:bg-blue-700" 
+                    onClick={() => handleSolve(incident)}
+                    disabled={solvingId === incident.id}
+                  >
+                    {solvingId === incident.id ? (
+                      <div className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin mr-2" />
+                    ) : (
+                      <CheckCircle className="h-4 w-4 mr-2" />
+                    )}
+                    Solve
+                  </Button>
+                  <Button 
+                    size="sm" 
                     className="glow-primary" 
                     onClick={() => handleInvestigate(incident)}
                     disabled={investigatingId === incident.id}
@@ -429,6 +504,13 @@ const Incidents = () => {
         open={showIncidentDetails} 
         onOpenChange={setShowIncidentDetails}
         incident={selectedIncident}
+      />
+      <SolveIncidentModal
+        open={showSolveModal}
+        onOpenChange={setShowSolveModal}
+        incident={selectedIncident}
+        solution={solutionData}
+        onAccept={handleAcceptSolution}
       />
     </div>
   );

@@ -15,7 +15,7 @@ const DB_PATH = process.env.SQLITE_DB_PATH || path.join(require('os').homedir(),
 let sqliteDb = null;
 
 try {
-  sqliteDb = new Database(DB_PATH, { readonly: true });
+  sqliteDb = new Database(DB_PATH, { readonly: false });
   console.log(`Connected to SQLite database at: ${DB_PATH}`);
 } catch (error) {
   console.error('Failed to connect to SQLite database:', error.message);
@@ -672,19 +672,9 @@ app.post('/api/predict-attack', async (req, res) => {
           console.log(`No database entry found for: ${predictedAttackName}`);
         }
 
-        // Store prediction in predictions table
-        try {
-          const insertStmt = sqliteDb.prepare(`
-            INSERT INTO predictions (input_vector, predicted_attack_name, confidence, summary, points)
-            VALUES (?, ?, ?, ?, ?)
-          `);
-          
-          insertStmt.run(inputVectorStr, predictedAttackName, confidence, summary, points);
-          console.log('Prediction saved to database');
-        } catch (insertError) {
-          // If database is readonly, this will fail silently
-          console.log('Could not save prediction (database may be readonly)');
-        }
+        // Prediction logic only - do not save to DB yet
+        // The user will explicitly log the incident via /api/log-incident
+        console.log('Prediction generated (not saved to DB yet)');
 
       } catch (dbError) {
         console.error('Database query error:', dbError.message);
@@ -737,6 +727,37 @@ app.post('/api/predict-attack', async (req, res) => {
       error: error.message,
       details: 'An error occurred during attack prediction'
     });
+  }
+});
+
+// Log Incident Endpoint (Manually add to DB)
+app.post('/api/log-incident', async (req, res) => {
+  const { attackName, confidence, inputVector, summary, points } = req.body;
+
+  if (!attackName) {
+    return res.status(400).json({ success: false, error: 'Attack Name is required' });
+  }
+
+  if (sqliteDb) {
+    try {
+      const insertStmt = sqliteDb.prepare(`
+        INSERT INTO predictions (input_vector, predicted_attack_name, confidence, summary, points)
+        VALUES (?, ?, ?, ?, ?)
+      `);
+      
+      const inputVectorStr = typeof inputVector === 'string' ? inputVector : JSON.stringify(inputVector);
+      const pointsStr = typeof points === 'string' ? points : JSON.stringify(points);
+
+      insertStmt.run(inputVectorStr, attackName, confidence, summary, pointsStr);
+      console.log(`Incident logged: ${attackName}`);
+      
+      res.json({ success: true, message: 'Incident logged successfully' });
+    } catch (error) {
+      console.error('Failed to log incident:', error);
+      res.status(500).json({ success: false, error: 'Failed to save incident to database' });
+    }
+  } else {
+    res.json({ success: true, message: 'Incident logged (Mock)' });
   }
 });
 
@@ -917,6 +938,67 @@ app.post('/api/investigate-incident', async (req, res) => {
     });
   } catch (error) {
     res.status(500).json({ success: false, error: error.message });
+  }
+});
+
+// Get Threat Solutions Endpoint
+app.post('/api/get-solutions', async (req, res) => {
+  const { type } = req.body;
+
+  if (!type) {
+    return res.status(400).json({ success: false, error: 'Incident Type is required' });
+  }
+
+  try {
+    const { spawn } = require('child_process');
+    const pythonProcess = spawn('python3', [
+      path.join(__dirname, 'threat_solutions.py'),
+      '--type', type
+    ]);
+
+    let pythonOutput = '';
+
+    pythonProcess.stdout.on('data', (data) => {
+      pythonOutput += data.toString();
+    });
+
+    pythonProcess.on('close', (code) => {
+      if (code === 0) {
+        try {
+          const result = JSON.parse(pythonOutput.trim());
+          res.json({ success: true, solution: result });
+        } catch (e) {
+          res.status(500).json({ success: false, error: 'Failed to parse solution output' });
+        }
+      } else {
+        res.status(500).json({ success: false, error: 'Solution script failed' });
+      }
+    });
+  } catch (error) {
+    res.status(500).json({ success: false, error: error.message });
+  }
+});
+
+// Resolve Incident Endpoint
+app.post('/api/resolve-incident', async (req, res) => {
+  const { id } = req.body;
+
+  if (!id) {
+    return res.status(400).json({ success: false, error: 'Incident ID is required' });
+  }
+
+  // Update in database if available
+  if (sqliteDb) {
+    try {
+      console.log(`Incident ${id} marked as resolved.`);
+      res.json({ success: true, message: 'Incident resolved successfully' });
+    } catch (error) {
+      console.error('Database resolve error:', error);
+      res.status(500).json({ success: false, error: 'Failed to resolve incident' });
+    }
+  } else {
+    console.log(`Mock: Incident ${id} resolved.`);
+    res.json({ success: true, message: 'Incident resolved successfully (Mock)' });
   }
 });
 

@@ -21,7 +21,10 @@ import {
   Network,
   Server,
   BarChart3,
-  Clock
+  Clock,
+  Lock,
+  User,
+  Code
 } from "lucide-react";
 
 const Dashboard = () => {
@@ -275,9 +278,17 @@ const Dashboard = () => {
                 <Search className="h-4 w-4 mr-2" />
                 AI Analysis
               </Button>
-              <Button variant="outline" size="sm" onClick={handleSendSecurityCode} disabled={isSendingCode}>
-                <BarChart3 className="h-4 w-4 mr-2" />
-                {isSendingCode ? 'Sending...' : 'Code Weight'}
+              <Button 
+                variant="outline" 
+                size="sm" 
+                onClick={() => {
+                  handleSendSecurityCode();
+                  navigate('/vector-search');
+                }}
+                disabled={isSendingCode}
+              >
+                <Code className="h-4 w-4 mr-2" />
+                {isSendingCode ? "Sending..." : "Code Weight"}
               </Button>
             </div>
           </CardContent>
@@ -300,7 +311,7 @@ const Dashboard = () => {
                 <Zap className="h-4 w-4 mr-2" />
                 AI Analysis
               </Button>
-              <Button className="w-full justify-start" variant="outline" onClick={() => navigate("/system-logs")}>
+              <Button className="w-full justify-start" variant="outline" onClick={() => navigate("/logs")}>
                 <Database className="h-4 w-4 mr-2" />
                 Query Logs
               </Button>

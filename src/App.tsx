@@ -25,7 +25,7 @@ const App = () => (
           <Route path="/auth" element={<Auth />} />
           <Route path="/dashboard" element={<Layout><Dashboard /></Layout>} />
           <Route path="/incidents" element={<Layout><Incidents /></Layout>} />
-          <Route path="/search" element={<Layout><VectorSearch /></Layout>} />
+          <Route path="/vector-search" element={<Layout><VectorSearch /></Layout>} />
           <Route path="/ai-analysis" element={<Layout><AIAnalysis /></Layout>} />
           <Route path="/logs" element={<Layout><SystemLogs /></Layout>} />
           <Route path="/settings" element={<Layout><Settings /></Layout>} />

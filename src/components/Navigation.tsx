@@ -35,7 +35,7 @@ const Navigation = () => {
   const navItems = [
     { path: "/dashboard", icon: Home, label: "Dashboard" },
     { path: "/incidents", icon: AlertTriangle, label: "Incidents" },
-    { path: "/search", icon: Search, label: "Vector Search" },
+    { path: "/vector-search", icon: Search, label: "Vector Search" },
     { path: "/ai-analysis", icon: Brain, label: "AI Analysis" },
     { path: "/logs", icon: FileText, label: "System Logs" },
     { path: "/settings", icon: Settings, label: "Settings" },
