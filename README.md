@@ -1,4 +1,4 @@
-# 🛡️ The VectorVault (Nirman 5.0)
+# 🛡️ The VectorVault
 
 > **Next-Gen AI-Powered Security Operations Center (SOC)**
 > *Advanced Threat Detection, Vector Analysis, and Automated Incident Response*
